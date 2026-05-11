@@ -1,0 +1,92 @@
+diff --git a/mpd_controller.py b/mpd_controller.py
+new file mode 100644
+index 0000000..abcd123
+--- /dev/null
++++ b/mpd_controller.py
+@@ -0,0 +1,126 @@
++from mpd import MPDClient, CommandError
++import threading
++
++
++class MPDController:
++    def __init__(self, host="127.0.0.1", port=6600):
++        self.host = host
++        self.port = port
++        self.lock = threading.Lock()
++        self.client = MPDClient()
++        self.client.timeout = 10
++        self.client.idletimeout = None
++        self._connect()
++
++    def _connect(self):
++        try:
++            self.client.connect(self.host, self.port)
++        except Exception:
++            pass
++
++    def _ensure(self):
++        try:
++            self.client.ping()
++        except Exception:
++            try:
++                self.client.disconnect()
++            except Exception:
++                pass
++            self.client = MPDClient()
++            self.client.timeout = 10
++            self.client.idletimeout = None
++            self._connect()
++
++    # -------------------------
++    # Playback
++    # -------------------------
++
++    def play_url(self, url):
++        with self.lock:
++            self._ensure()
++            self.client.clear()
++            self.client.add(url)
++            self.client.play()
++
++    def stop(self):
++        with self.lock:
++            self._ensure()
++            self.client.stop()
++
++    def toggle_pause(self):
++        with self.lock:
++            self._ensure()
++            state = self.client.status().get("state")
++            self.client.pause(1 if state == "play" else 0)
++
++    # -------------------------
++    # Volume / mute
++    # -------------------------
++
++    def set_volume(self, vol):
++        vol = max(0, min(100, int(vol)))
++        with self.lock:
++            self._ensure()
++            self.client.setvol(vol)
++
++    def get_volume(self):
++        with self.lock:
++            self._ensure()
++            return int(self.client.status().get("volume", 0))
++
++    def mute(self):
++        self.set_volume(0)
++
++    # -------------------------
++    # Metadata
++    # -------------------------
++
++    def current_track(self):
++        with self.lock:
++            self._ensure()
++            song = self.client.currentsong()
++            return {
++                "artist": song.get("artist", ""),
++                "title": song.get("title", ""),
++                "name": song.get("name", "")
++            }
